@@ -1,6 +1,9 @@
 use atty::Stream;
 use clap::Parser;
-use serde_json::{Result, Value};
+use serde_json::{Result as JSONResult, Value};
+use sqlparser::ast::Statement;
+use sqlparser::dialect::GenericDialect;
+use sqlparser::parser::{Parser as SQLParser, ParserError};
 use std::error::Error;
 
 #[derive(Parser, Debug)]
@@ -16,7 +19,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    println!("query: {}", args.query);
+    let query = args.query;
 
     let source = match args.source {
         Some(source) => {
@@ -32,14 +35,30 @@ fn main() {
         }
     };
 
-    match parse_source(&source.to_owned()) {
-        Ok(json) => {
-            println!("{:?}", json);
-        }
+    let sql = match parse_query(&query) {
+        Ok(sql) => sql,
         Err(err) => {
             print_err(&err);
+            panic!()
         }
-    }
+    };
+
+    let json = match parse_source(&source.to_owned()) {
+        Ok(json) => json,
+        Err(err) => {
+            print_err(&err);
+            panic!()
+        }
+    };
+
+    println!("### SQL {:?}", sql);
+    println!("### JSON {:?}", json);
+}
+
+fn parse_query(query: &str) -> Result<Vec<Statement>, ParserError> {
+    let dialect = GenericDialect {};
+    let ast = SQLParser::parse_sql(&dialect, query)?;
+    Ok(ast)
 }
 
 fn is_exists_pipe_in() -> bool {
@@ -50,7 +69,7 @@ fn print_err(err: &dyn Error) {
     eprintln!("Error occured!: {}", err);
 }
 
-fn parse_source(source: &str) -> Result<Value> {
+fn parse_source(source: &str) -> JSONResult<Value> {
     let v: Value = serde_json::from_str(source)?;
     Ok(v)
 }
